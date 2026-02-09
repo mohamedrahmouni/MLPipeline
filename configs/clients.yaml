@@ -1,0 +1,60 @@
+clients:
+  - client_id: client_alpha
+    name: Alpha Corp
+    region: us-east-1
+    row_count: 100000
+    baseline_accuracy: 0.85
+    model_params:
+      n_estimators: 100
+      max_depth: 6
+      learning_rate: 0.1
+      num_leaves: 31
+      verbose: -1
+
+  - client_id: client_beta
+    name: Beta Industries
+    region: eu-west-1
+    row_count: 50000
+    baseline_accuracy: 0.83
+    model_params:
+      n_estimators: 150
+      max_depth: 8
+      learning_rate: 0.05
+      num_leaves: 63
+      verbose: -1
+
+  - client_id: client_gamma
+    name: Gamma Solutions
+    region: us-west-2
+    row_count: 200000
+    baseline_accuracy: 0.87
+    model_params:
+      n_estimators: 200
+      max_depth: 5
+      learning_rate: 0.08
+      num_leaves: 31
+      verbose: -1
+
+  - client_id: client_delta
+    name: Delta Tech
+    region: ap-southeast-1
+    row_count: 75000
+    baseline_accuracy: 0.84
+    model_params:
+      n_estimators: 100
+      max_depth: 7
+      learning_rate: 0.1
+      num_leaves: 31
+      verbose: -1
+
+  - client_id: client_epsilon
+    name: Epsilon Analytics
+    region: eu-west-1
+    row_count: 150000
+    baseline_accuracy: 0.86
+    model_params:
+      n_estimators: 120
+      max_depth: 6
+      learning_rate: 0.07
+      num_leaves: 45
+      verbose: -1

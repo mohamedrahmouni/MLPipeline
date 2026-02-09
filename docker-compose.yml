@@ -1,0 +1,128 @@
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    MLFLOW_URI: http://mlflow:5000
+    RAY_ADDRESS: ray://ray-head:10001
+    PYTHONPATH: /opt/airflow/src:/opt/airflow
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./configs:/opt/airflow/configs
+    - ./logs:/opt/airflow/logs
+    - ./mlflow-data:/mlflow-data
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # Single Airflow container: api-server + scheduler + triggerer
+  # 'standalone' is purpose-built for dev/testing with LocalExecutor.
+  # No cross-container JWT or execution API issues.
+  airflow:
+    <<: *airflow-common
+    command: standalone
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /sources/logs /sources/dags /sources/plugins
+        chown -R "${AIRFLOW_UID:-50000}:0" /sources/{logs,dags,plugins}
+        mkdir -p /sources/mlflow-data
+        chown -R "${AIRFLOW_UID:-50000}:0" /sources/mlflow-data
+        # CHANGE: Just run the version check to ensure DB is ready and exit 0
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+    user: "0:0"
+    volumes:
+      - ./:/sources
+
+  mlflow:
+    image: python:3.12-slim
+    command:
+      - bash
+      - -c
+      - |
+        pip install --no-cache-dir mlflow==3.9.0 &&
+        mlflow server --host 0.0.0.0 --port 5000 \
+          --allowed-hosts 'mlflow,localhost,127.0.0.1,mlflow:5000,localhost:5000,127.0.0.1:5000' \
+          --backend-store-uri file:///mlflow-data/mlruns \
+          --artifacts-destination file:///mlflow-data/artifacts \
+          --serve-artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow-data:/mlflow-data
+    restart: always
+
+  ray-head:
+    image: rayproject/ray:2.53.0-py312
+    command: ray start --head --port=6379 --dashboard-host=0.0.0.0 --dashboard-port=8265 --block
+    ports:
+      - "8265:8265"
+      - "10001:10001"
+      - "6379:6379"
+    shm_size: 2gb
+    restart: always
+
+  ray-worker-1:
+    image: rayproject/ray:2.53.0-py312
+    command: ray start --address=ray-head:6379 --block
+    depends_on:
+      - ray-head
+    shm_size: 2gb
+    restart: always
+
+  ray-worker-2:
+    image: rayproject/ray:2.53.0-py312
+    command: ray start --address=ray-head:6379 --block
+    depends_on:
+      - ray-head
+    shm_size: 2gb
+    restart: always
+
+volumes:
+  postgres-db-volume:
