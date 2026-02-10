@@ -29,18 +29,6 @@ Rough monthly estimate for 2,000 client pipelines on AWS + Snowflake.
 
 ---
 
-## Key notes
-
-**Snowflake (55% of total)** is the dominant cost. We keep the S warehouse (already handles 3-11 min per client) and use multi-cluster mode for concurrency instead of upsizing to L. This avoids over-provisioning compute per query. Clustering keys on the date column and per-second billing + auto-suspend keep costs tight.
-
-**Ray scales to zero on Days 2-31.** Since simulations only run on Day 1, the cluster spins up, processes, and terminates. Using EKS with Karpenter or bare EC2 spot fleets avoids always-on cost. The $75 estimate reflects Day 1 burst only with spot pricing.
-
-**MWAA is the fixed-cost "tax."** The ~$350 base environment runs 24/7. For lower cost, Step Functions (~$50/month for 2,000 executions) is an alternative, but loses the Airflow UI and Python-native DAG logic that makes branching/retrain decisions clean.
-
-**Model reuse saves time, not money.** SageMaker training is already cheap ($25/month). The real value of skipping 1,300 training jobs is throughput: each skipped job frees 7-23 minutes of pipeline time on Day 1.
-
----
-
 ## Model Reuse Impact
 
 | Scenario | Training Jobs | Training Cost | Pipeline Time Saved |

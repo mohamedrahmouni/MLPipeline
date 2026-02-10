@@ -8,7 +8,8 @@ A working end-to-end prototype that demonstrates scaling a monthly ML + Monte Ca
 
 ## What's Inside
 
-- **Full pipeline**: Data prep (DuckDB/Snowflake) -> Session-aware split -> Train (LightGBM) -> Monte Carlo simulation (Ray)
+- **Full pipeline**: Data prep (Snowflake in prod, DuckDB in demo) -> Session-aware train/test split (Snowflake in prod, DuckDB in demo) -> Train (PythonOperator locally, SageMaker in prod) -> Monte Carlo simulation (Ray)
+- **Snowflake stand-in**: DuckDB is used locally to simulate Snowflake UDTFs and SQL transforms
 - **Intelligent model reuse**: Retrain only when performance degrades; skip training for ~65% of clients
 - **Parallel execution**: Multiple clients run concurrently via Airflow TaskGroups
 - **Ray-based simulation**: Distributed Monte Carlo with shared model broadcasting via `ray.put()`
@@ -40,7 +41,15 @@ docker compose logs airflow 2>&1 | grep "Password for user"
 
 ### Run the Demo
 
-**Option 1: Comparison script** (recommended)
+**Option 1: Airflow DAG** (recommended)
+
+1. Open Airflow UI at http://localhost:8080
+2. Enable and trigger the `monthly_ml_pipeline` DAG
+3. Watch TaskGroups execute in parallel
+4. Check MLflow UI for logged models and metrics
+
+
+**Option 2: Comparison script** 
 
 ```bash
 uv sync
@@ -48,13 +57,6 @@ MLFLOW_URI=http://localhost:5000 uv run python baseline/compare.py
 ```
 
 Shows old (sequential, always retrain) vs new (parallel, intelligent reuse) side by side.
-
-**Option 2: Airflow DAG**
-
-1. Open Airflow UI at http://localhost:8080
-2. Enable and trigger the `monthly_ml_pipeline` DAG
-3. Watch TaskGroups execute in parallel
-4. Check MLflow UI for logged models and metrics
 
 ---
 
@@ -82,6 +84,7 @@ MLPipeline/
 │   └── compare.py            # Old vs new comparison
 └── docs/
     ├── architecture.md       # C4 diagrams, old vs new comparison
+    ├── decisions.md          # Architecture Decision Records
     └── cost_estimate.md      # AWS cost breakdown (~$1,730/month for 2,000 clients)
 ```
 
@@ -90,8 +93,8 @@ MLPipeline/
 ## Documentation
 
 - [Architecture](docs/architecture.md) - C4 diagrams, pipeline flow, old vs new comparison
-- [Decisions](docs/decisions.md) - ADRs
-- [Cost Estimate](docs/cost_estimate.md) - Monthly AWS cost breakdown
+- [Decisions](docs/decisions.md) - Architecture Decision Records
+- [Cost Estimate](docs/cost_estimate.md) - Monthly AWS cost breakdown (~$1,730/month for 2,000 clients)
 
 ---
 

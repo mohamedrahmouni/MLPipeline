@@ -110,6 +110,7 @@ def run_simulate_task(client_config):
     model_name = get_model_name(client_id)
     model_uri = f"models:/{model_name}@champion"
     model = mlflow.lightgbm.load_model(model_uri)
+
     prepared = _gen_data(client_config)
     result = run_monte_carlo_simulation(model, prepared, client_config)
     return f"Simulation complete: {len(result)} rows"

@@ -7,16 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER airflow
 
-# Only install what Airflow needs to run PythonOperator tasks:
-# - lightgbm, scikit-learn: model training (train.py)
-# - mlflow: experiment tracking (train.py, registry.py)
-# - duckdb: data prep standing in for Snowflake (data_prep.py)
-# - pyyaml: parse clients.yaml (pipeline_dag.py)
-# Ray is NOT needed here — simulation connects to the Ray cluster
-# as a remote client, and falls back to local numpy if unavailable.
-RUN pip install --no-cache-dir \
-    lightgbm \
-    scikit-learn \
+# Shared ML libs (numpy, lightgbm, scikit-learn) pinned to match Ray workers.
+COPY requirements-ml.txt /tmp/requirements-ml.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-ml.txt \
     mlflow==3.9.0 \
     duckdb \
     pyyaml \

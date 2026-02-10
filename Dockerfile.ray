@@ -1,0 +1,5 @@
+FROM rayproject/ray:2.53.0-py312
+
+# Shared ML libs so workers can unpickle models and call predict_proba().
+COPY requirements-ml.txt /tmp/requirements-ml.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-ml.txt

@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-Proposed AWS+Snowflake architecture for scaling the monthly ML pipeline from ~50 runs/day to thousands of runs/day. Follows C4 modeling principles.
+Proposed AWS+Snowflake architecture for scaling the monthly ML pipeline from ~50 runs/day to thousands of runs/day.
 
 ---
 
@@ -75,30 +75,24 @@ graph TB
 graph TB
     Start([Monthly Trigger]) --> Prep[Data Prep + Split<br/>Snowflake UDTF]
     Prep --> Export[Export to S3]
-    Export --> Check{Retrain Check<br/>MLflow Registry}
+    Export --> SageMaker[SageMaker Training Job<br/>Check + Train if needed]
 
-    Check -->|degraded| Train[Train LightGBM<br/>SageMaker Spot]
-    Check -->|OK| Reuse[Load Existing Model<br/>from S3]
-
-    Train --> Save[Save Model to S3<br/>+ Log to MLflow]
-    Save --> Simulate
-    Reuse --> Simulate[Monte Carlo Simulation<br/>Ray Cluster]
+    SageMaker --> Simulate[Monte Carlo Simulation<br/>Ray Cluster]
 
     Simulate --> Results[Save Results<br/>S3 + Snowflake]
     Results --> End([Done])
 
-    style Check fill:#ffd700
-    style Train fill:#ff9900
-    style Reuse fill:#90ee90
+    style SageMaker fill:#ff9900
     style Simulate fill:#028cf0
 ```
 
 **Steps:**
 
 1. **Data Prep + Split** (Snowflake) — UDTF extracts last month's data, imputes nulls, casts types. Session-aware train/test split (no leakage). Output: 31-column train/test sets exported to S3.
-2. **Retrain Check** (MLflow) — Load champion model, evaluate on new test set. If performance degraded beyond threshold, retrain; otherwise reuse existing model.
-3. **Train** (SageMaker, conditional) — Spot instance trains LightGBM on 1M rows, validates on 500k. Logs metrics (balanced accuracy, AUC, precision, recall, F1) to MLflow. Saves artifact to regional S3.
-4. **Monte Carlo Simulation** (Ray) — Sample 2M rows, 300 perturbation evaluations per row. Model broadcast once via `ray.put()` shared memory. Results saved to S3, loaded back into Snowflake.
+
+2. **SageMaker Training Job** (with built-in retrain check) — Job starts, reads test data and champion model from S3. Evaluates champion on new test set. If degradation > 5%, continues to train LightGBM on 1M rows, logs metrics to MLflow, saves new model to S3. If performance OK, exits early (saving compute cost). Either way, logs the decision to MLflow for audit.
+
+3. **Monte Carlo Simulation** (Ray) — Airflow launches Ray job. Sample 2M rows, 300 perturbation evaluations per row. Model broadcast once via `ray.put()` to worker shared memory. Data chunked and distributed as parallel `@ray.remote` tasks. Results saved to S3, loaded back into Snowflake.
 
 ---
 

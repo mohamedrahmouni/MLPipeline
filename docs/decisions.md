@@ -13,11 +13,11 @@
 - Decision: Use MLflow Model Registry. Track per-client model names and use a stable alias ("champion") for the current model.
 - Consequences: Easy rollback and stable model URI. Requires MLflow hosting and access control.
 
-## Simulation parallelism via Ray
+## Simulation parallelism via Ray remote tasks
 
-- Context: Monte Carlo simulation is the heaviest step and must scale horizontally.
-- Decision: Use Ray for distributed execution and shared model broadcasting (single put, many tasks).
-- Consequences: Fast parallelism and local dev parity. Requires version alignment between Ray client and cluster.
+- Context: Monte Carlo simulation is the heaviest step (2M rows x 300 perturbations = 600M predictions) and must scale horizontally.
+- Decision: Use `@ray.remote` tasks for chunk-based parallelism. Model broadcast once via `ray.put()` to shared memory (avoiding per-task serialization). Data chunked and distributed as parallel tasks.
+- Consequences: Fine-grained task scheduling, zero-copy model sharing across workers. Requires Ray cluster and client version alignment.
 
 ## Model training via SageMaker (spot)
 
@@ -29,7 +29,7 @@
 
 - Context: Monthly retraining is wasteful when degradation is typically low.
 - Decision: Evaluate the latest model on the new test set and retrain only if balanced accuracy drops beyond a threshold.
-- Consequences: Retrainign logic is data-driven
+- Consequences: Retraining logic is data-driven and auditable via MLflow.
 
 ## Data residency
 

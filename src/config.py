@@ -8,6 +8,11 @@ _DEFAULTS: Dict[str, Any] = {
     "mlflow_tracking_uri": "http://localhost:5000",
 }
 
+# Shared ML constants
+CATEGORICAL_COLS = ["category_a", "category_b", "region", "segment"]
+EXCLUDE_COLS = {"session_id", "user_id", "timestamp", "target"}
+BATCH_SIZE = 256
+
 
 def _candidate_paths() -> list[str]:
     return [

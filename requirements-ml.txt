@@ -1,0 +1,5 @@
+# Shared ML library versions — installed in both Airflow and Ray containers
+# to ensure pickle/serialisation compatibility across the Ray Client boundary.
+numpy==2.4.0
+lightgbm==4.6.0
+scikit-learn==1.8.0
