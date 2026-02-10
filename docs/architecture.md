@@ -128,4 +128,4 @@ graph TB
 | Synthetic data generation | Snowflake UDTF on real data |
 | PythonOperator | SageMakerTrainingOperator |
 | Local filesystem | S3 regional buckets |
-| Manual DAG trigger | EventBridge cron (1st of month) |
+| Manual DAG trigger | Airflow cron (1st of month) |
