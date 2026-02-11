@@ -14,7 +14,6 @@ Approach:
   6. Gather results from all tasks into a single pandas DataFrame.
 """
 import os
-import time
 import numpy as np
 import pandas as pd
 import ray
@@ -32,17 +31,19 @@ def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
 
 @ray.remote
 def _perturb_chunk(chunk: pd.DataFrame, model_ref, n_perturbations: int) -> pd.DataFrame:
-    """Ray remote task: run perturbation simulation on one chunk of rows.
+    """Ray remote task: run what-if improvement simulation on one chunk (VECTORIZED).
 
     The model is fetched from the object store (broadcast via ray.put())
     so it is transferred once per worker, not once per task.
 
-    For each row:
-      - Add Gaussian noise (std=0.1) to numeric features, N times.
-      - Keep categorical features constant (no perturbation).
-      - Predict P(target=1) on each perturbed version.
-      - Compute delta = perturbed_pred - base_pred.
-      - Summarise deltas (mean, std, min, max, directional rates).
+    Simulates improvements (5-20% feature enhancements) across n_perturbations scenarios.
+    Returns 19-column analysis for business decision-making:
+      - 4 base metrics
+      - 6 improvement scenarios (worst to best case)
+      - 3 impact distribution metrics
+      - 6 business metrics (upside/downside/confidence)
+
+    Fully vectorized: processes all rows and all perturbations in parallel.
     """
     # Ray auto-dereferences ObjectRefs passed as arguments to remote functions
     model = model_ref
@@ -56,44 +57,71 @@ def _perturb_chunk(chunk: pd.DataFrame, model_ref, n_perturbations: int) -> pd.D
     base_features = chunk[feature_cols].copy()
     base_preds = model.predict_proba(base_features)[:, 1]
 
-    results = []
-    for i in range(len(chunk)):
-        # Extract numeric features and categorical features separately
-        num_values = chunk.iloc[i][num_cols].astype(float).values
-        cat_values = chunk.iloc[i][cat_cols]
+    n_rows = len(chunk)
 
-        # Perturb only numeric features
-        noise = np.random.randn(n_perturbations, len(num_cols)) * 0.1
-        perturbed_num = num_values + noise
+    # VECTORIZED: Generate all improvements for all rows at once
+    # Shape: (n_rows, n_features) -> (n_rows, n_perturbations, n_features)
+    num_features = chunk[num_cols].astype(float).values  # (n_rows, n_num_cols)
 
-        # Create perturbed dataframe with numeric + categorical
-        perturbed_df = pd.DataFrame(perturbed_num, columns=num_cols)
-        for col in cat_cols:
-            perturbed_df[col] = cat_values[col]
+    # Generate improvement factors: (n_rows, n_perturbations, n_num_cols)
+    improvement_factors = 1.0 + np.random.uniform(0.05, 0.20, size=(n_rows, n_perturbations, len(num_cols)))
 
-        # Convert categorical columns to category dtype for LightGBM
-        for col in cat_cols:
-            perturbed_df[col] = perturbed_df[col].astype("category")
+    # Apply improvements: broadcast multiplication
+    improved_features = num_features[:, np.newaxis, :] * improvement_factors  # (n_rows, n_perturbations, n_num_cols)
 
-        # Reorder columns to match original
-        perturbed_df = perturbed_df[feature_cols]
+    # Reshape to (n_rows * n_perturbations, n_num_cols) for prediction
+    improved_flat = improved_features.reshape(-1, len(num_cols))
 
-        preds = model.predict_proba(perturbed_df)[:, 1]
-        d = preds - base_preds[i]
+    # Create dataframe with categorical features repeated
+    improved_df = pd.DataFrame(improved_flat, columns=num_cols)
 
-        results.append({
-            "session_id": chunk.iloc[i]["session_id"],
-            "base_probability": base_preds[i],
-            "mean_delta": d.mean(),
-            "std_delta": d.std(),
-            "min_delta": d.min(),
-            "max_delta": d.max(),
-            "positive_impact_rate": (d > 0).mean(),
-            "negative_impact_rate": (d < 0).mean(),
-            "mean_abs_delta": np.abs(d).mean(),
-        })
+    # Repeat categorical features for each perturbation
+    for col in cat_cols:
+        improved_df[col] = np.repeat(chunk[col].values, n_perturbations)
+        improved_df[col] = improved_df[col].astype("category")
 
-    return pd.DataFrame(results)
+    improved_df = improved_df[feature_cols]
+
+    # VECTORIZED: Single prediction call for all rows * all perturbations
+    all_preds = model.predict_proba(improved_df)[:, 1]  # (n_rows * n_perturbations,)
+
+    # Reshape back to (n_rows, n_perturbations)
+    preds_matrix = all_preds.reshape(n_rows, n_perturbations)
+
+    # VECTORIZED: Calculate deltas for all rows
+    deltas = preds_matrix - base_preds[:, np.newaxis]  # (n_rows, n_perturbations)
+
+    # VECTORIZED: Calculate all 19 metrics for all rows at once
+    results_dict = {
+        # Base (4 cols)
+        "session_id": chunk["session_id"].values,
+        "base_probability": base_preds,
+        "expected_improvement": deltas.mean(axis=1),
+        "improvement_std": deltas.std(axis=1),
+
+        # Scenarios (6 cols) - vectorized percentiles
+        "worst_case": deltas.min(axis=1),
+        "p10_improvement": np.percentile(deltas, 10, axis=1),
+        "p25_improvement": np.percentile(deltas, 25, axis=1),
+        "median_improvement": np.percentile(deltas, 50, axis=1),
+        "p75_improvement": np.percentile(deltas, 75, axis=1),
+        "best_case": deltas.max(axis=1),
+
+        # Impact distribution (3 cols)
+        "positive_impact_pct": (deltas > 0).mean(axis=1) * 100,
+        "negative_impact_pct": (deltas < 0).mean(axis=1) * 100,
+        "neutral_impact_pct": (deltas == 0).mean(axis=1) * 100,
+
+        # Business metrics (6 cols)
+        "upside_potential": np.maximum(0, deltas.max(axis=1)),
+        "downside_risk": np.abs(np.minimum(0, deltas.min(axis=1))),
+        "expected_value": base_preds + deltas.mean(axis=1),
+        "confidence_lower_90": base_preds + np.percentile(deltas, 10, axis=1),
+        "confidence_upper_90": base_preds + np.percentile(deltas, 90, axis=1),
+        "volatility_score": deltas.std(axis=1) / (base_preds + 1e-6),
+    }
+
+    return pd.DataFrame(results_dict)  # 19 columns, vectorized!
 
 
 def run_monte_carlo_simulation(model, data_df, client_config, n_perturbations=300):
@@ -111,9 +139,7 @@ def run_monte_carlo_simulation(model, data_df, client_config, n_perturbations=30
     sample = data_df.sample(n=min(len(data_df), 2_000_000), random_state=42)
     sim_sample = _prepare_features(sample.sample(n=min(1000, len(sample)), random_state=42))
 
-    sim_time = min(12 + (len(sample) / 2_000_000) * 8, 20)
-    print(f"[{client_id}] Monte Carlo: {len(sim_sample):,} rows x {n_perturbations} perturbations ({sim_time:.0f}s simulated)")
-    time.sleep(sim_time / 60)
+    print(f"[{client_id}] Monte Carlo: {len(sim_sample):,} rows x {n_perturbations} perturbations")
 
     # 2. Connect to Ray cluster via Ray Client (if not already connected).
     if not ray.is_initialized():
@@ -132,5 +158,13 @@ def run_monte_carlo_simulation(model, data_df, client_config, n_perturbations=30
 
     # 5. Gather results from all workers.
     result = pd.concat(ray.get(futures), ignore_index=True)
-    print(f"[{client_id}] Ray simulation complete: {result.shape}")
+
+    # Print summary of what-if analysis results
+    print(f"[{client_id}] What-if simulation complete: {result.shape[0]:,} sessions × 19 columns")
+    print(f"[{client_id}] Improvement insights (avg across sessions):")
+    print(f"  Expected improvement:    {result['expected_improvement'].mean():+.4f}")
+    print(f"  Upside potential:        {result['upside_potential'].mean():.4f}")
+    print(f"  Downside risk:           {result['downside_risk'].mean():.4f}")
+    print(f"  Positive impact:         {result['positive_impact_pct'].mean():.1f}%")
+
     return result
