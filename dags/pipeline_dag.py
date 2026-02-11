@@ -29,7 +29,7 @@ with DAG(
     default_args={"owner": "ml-platform", "retries": 0},
     description="Monthly ML training + Monte Carlo simulation",
     schedule="0 0 1 * *",
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     max_active_tasks=5,
     tags=["ml", "monthly"],

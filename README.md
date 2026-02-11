@@ -20,7 +20,11 @@ A working end-to-end prototype that demonstrates scaling a monthly ML + Monte Ca
 
 ## Quick Start
 
-**Prerequisites**: Docker & Docker Compose v2.0+, 8GB RAM, uv (Python package manager)
+**Prerequisites**:
+- Docker & Docker Compose v2.0+
+- 8GB RAM
+- **Python 3.12**
+- uv (Python package manager)
 
 ```bash
 # Build and start all services

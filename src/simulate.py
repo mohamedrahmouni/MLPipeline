@@ -44,7 +44,8 @@ def _perturb_chunk(chunk: pd.DataFrame, model_ref, n_perturbations: int) -> pd.D
       - Compute delta = perturbed_pred - base_pred.
       - Summarise deltas (mean, std, min, max, directional rates).
     """
-    model = model_ref  # Ray auto-resolves the ObjectRef
+    # Ray auto-dereferences ObjectRefs passed as arguments to remote functions
+    model = model_ref
     feature_cols = [c for c in chunk.columns if c not in EXCLUDE_COLS]
 
     # Separate numeric and categorical features
@@ -114,16 +115,20 @@ def run_monte_carlo_simulation(model, data_df, client_config, n_perturbations=30
     print(f"[{client_id}] Monte Carlo: {len(sim_sample):,} rows x {n_perturbations} perturbations ({sim_time:.0f}s simulated)")
     time.sleep(sim_time / 60)
 
-    # 2. Connect to Ray cluster via Ray Client.
-    ray_addr = os.getenv("RAY_ADDRESS", "ray://localhost:10001")
-    ray.init(address=ray_addr, ignore_reinit_error=True)
+    # 2. Connect to Ray cluster via Ray Client (if not already connected).
+    if not ray.is_initialized():
+        ray_addr = os.getenv("RAY_ADDRESS", "ray://localhost:10001")
+        ray.init(address=ray_addr, ignore_reinit_error=True)
 
     # 3. Broadcast model to worker object stores (transferred once per worker).
     model_ref = ray.put(model)
 
     # 4. Split sample into chunks and dispatch as parallel remote tasks.
     chunks = [sim_sample.iloc[i:i + BATCH_SIZE] for i in range(0, len(sim_sample), BATCH_SIZE)]
-    futures = [_perturb_chunk.remote(chunk, model_ref, n_perturbations) for chunk in chunks]
+    futures = [
+        _perturb_chunk.options(name=f"{client_id}_sim_chunk_{i}").remote(chunk, model_ref, n_perturbations)
+        for i, chunk in enumerate(chunks)
+    ]
 
     # 5. Gather results from all workers.
     result = pd.concat(ray.get(futures), ignore_index=True)

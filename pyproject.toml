@@ -3,7 +3,7 @@ name = "mlpipeline"
 version = "0.1.0"
 description = "ML pipeline migration showcase"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12,<3.13"
 dependencies = [
   "lightgbm",
   "scikit-learn",
@@ -12,7 +12,7 @@ dependencies = [
   "pandas",
   "numpy",
   "pyyaml",
-  "ray",
+  "ray[client]",
 ]
 
 [project.optional-dependencies]

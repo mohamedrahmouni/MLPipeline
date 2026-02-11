@@ -130,5 +130,16 @@ services:
     shm_size: 2gb
     restart: always
 
+  ray-worker-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.ray
+    command: ray start --address=ray-head:6379 --block
+    depends_on:
+      - ray-head
+    shm_size: 2gb
+    restart: always
+    
+
 volumes:
   postgres-db-volume:
