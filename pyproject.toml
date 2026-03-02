@@ -1,7 +1,7 @@
 [project]
 name = "mlpipeline"
 version = "0.1.0"
-description = "ML pipeline migration showcase"
+description = "Scalable monthly ML training + Monte Carlo simulation pipeline (Airflow, Ray, MLflow, LightGBM)"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

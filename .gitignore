@@ -10,6 +10,9 @@ ENV/
 .venv
 .env*
 *egg-info/
+dist/
+build/
+*.egg
 
 # MLflow
 mlflow-data/
@@ -25,6 +28,7 @@ logs/
 airflow.db
 airflow.cfg
 airflow-webserver.pid
+plugins/
 
 # IDE
 .vscode/

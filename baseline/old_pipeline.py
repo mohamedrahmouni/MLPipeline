@@ -1,7 +1,7 @@
 """
-Old architecture reference — Dataiku constraints.
+Legacy architecture reference — original platform constraints.
 
-Documents the original system's limitations (from Problem.md):
+Documents the original system's limitations:
   - Sequential execution: 1 client at a time
   - Fixed resources: 4 vCPU, 32 GB RAM (shared across all tasks)
   - Always retrain: no model reuse mechanism

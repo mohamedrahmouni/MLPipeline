@@ -55,7 +55,7 @@ def run_client_sequential_mode(client_config, scale_factor):
     """
     OLD ARCHITECTURE simulation: sequential, always retrain, no Ray.
 
-    This mimics the old Dataiku approach:
+    This mimics the legacy platform approach:
     - Always retrains (ignores intelligent reuse)
     - Uses local simulation instead of Ray cluster
     - Runs one step at a time
@@ -120,7 +120,7 @@ def _run_local_simulation(model, data_df, client_config, n_perturbations=100):
         sample[col] = sample[col].astype("category")
 
     # Base predictions
-    base_features = sample[feature_cols].copy()
+    base_features = sample[feature_cols]
     base_preds = model.predict_proba(base_features)[:, 1]
 
     results = []
@@ -423,7 +423,7 @@ def main():
     clients = all_clients[:args.max_clients] if args.max_clients > 0 else all_clients
 
     print(f"\n{'='*70}")
-    print(f"PIPELINE COMPARISON: Old (Dataiku) vs New (AWS)")
+    print(f"PIPELINE COMPARISON: Legacy vs New (AWS)")
     print(f"{'='*70}")
     print(f"  Testing {len(clients)} clients")
     print(f"  Data scale factor: {args.scale:.2f} ({1/args.scale:.1f}x faster)")

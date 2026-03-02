@@ -22,11 +22,10 @@ from config import EXCLUDE_COLS, CATEGORICAL_COLS, BATCH_SIZE
 
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
     """Prepare features for prediction, converting categorical columns to category dtype."""
-    prepared = df.copy()
-    cat_cols = [c for c in CATEGORICAL_COLS if c in prepared.columns]
+    cat_cols = [c for c in CATEGORICAL_COLS if c in df.columns]
     for col in cat_cols:
-        prepared[col] = prepared[col].astype("category")
-    return prepared
+        df[col] = df[col].astype("category")
+    return df
 
 
 @ray.remote
@@ -54,8 +53,7 @@ def _perturb_chunk(chunk: pd.DataFrame, model_ref, n_perturbations: int) -> pd.D
     num_cols = [c for c in feature_cols if c not in cat_cols]
 
     # Vectorised base prediction for the whole chunk at once
-    base_features = chunk[feature_cols].copy()
-    base_preds = model.predict_proba(base_features)[:, 1]
+    base_preds = model.predict_proba(chunk[feature_cols])[:, 1]
 
     n_rows = len(chunk)
 

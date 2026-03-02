@@ -1,6 +1,6 @@
 # Pipeline Comparison
 
-Real comparison between old (Dataiku) and new (AWS) architectures using actual docker-compose services.
+Real comparison between legacy (sequential) and new (AWS) architectures using actual docker-compose services.
 
 ## What It Does
 
@@ -10,7 +10,7 @@ Real comparison between old (Dataiku) and new (AWS) architectures using actual d
 - Local/sequential Monte Carlo simulation
 - No intelligent model reuse
 
-**NEW Architecture (Parallalel)**:
+**NEW Architecture (Parallel)**:
 - Parallel processing (multiple clients concurrently)
 - Model reuse (checks if retrain needed)
 - Distributed Ray cluster for Monte Carlo simulation
